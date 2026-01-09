@@ -1,4 +1,4 @@
-package com.example.demo.model.response;
+package com.example.demo.uitl;
 import lombok.Getter;
 import lombok.Setter;
 

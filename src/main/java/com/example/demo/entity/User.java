@@ -5,18 +5,20 @@ import lombok.*;
 
 import java.util.UUID;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Getter
-@Setter
 @Entity
-@Table(name = "user")
+@Table(name = "users")
+@Data
 public class User {
     @Id
-    @Column(name = "id")
-    private Integer id;
-    @Column(name = "username")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     private String username;
-    @Column(name = "password")
     private String password;
+    private String fullName;
+    private String phone;
+
+    @ManyToOne
+    @JoinColumn(name = "role_id")
+    private Role role;
+
 }
