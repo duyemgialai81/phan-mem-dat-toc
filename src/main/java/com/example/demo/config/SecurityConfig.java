@@ -19,10 +19,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Thêm các đường dẫn bạn muốn cho phép người khác test vào đây
                         .requestMatchers("/api-v1/login/**", "/api-v1/register/**", "/api-v1/public/**").permitAll()
-                        // Hoặc tạm thời mở hết TẤT CẢ để test nhanh (Cẩn thận: Chỉ dùng khi đang dev/test)
-                        // .requestMatchers("/**").permitAll()
                         .anyRequest().authenticated()
                 );
         return http.build();
