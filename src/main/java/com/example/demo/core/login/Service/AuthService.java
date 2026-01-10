@@ -29,13 +29,24 @@ public class AuthService {
     public LoginResponse login(LoginRequest loginRequest, HttpServletRequest request) {
         User user = userRepository.findByUsername(loginRequest.getUsername())
                 .orElseThrow(() -> new ApiException("Tài khoản không tồn tại", "USER_NOT_FOUND"));
+
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
             throw new ApiException("Mật khẩu không chính xác", "INVALID_PASSWORD");
         }
+
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+
         saveUserSession(user, accessToken, refreshToken, request);
-        return new LoginResponse(accessToken, refreshToken, "Bearer");
+
+        // Trả về kèm theo fullName và username
+        return new LoginResponse(
+                accessToken,
+                refreshToken,
+                "Bearer",
+                user.getFullName(),
+                user.getUsername()
+        );
     }
     public User register(LoginRequest registerRequest) {
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
