@@ -39,7 +39,7 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     implementation 'org.modelmapper:modelmapper:3.1.1'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
-
+    implementation 'eu.bitwalker:UserAgentUtils:1.21'
     // JWT
     implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'

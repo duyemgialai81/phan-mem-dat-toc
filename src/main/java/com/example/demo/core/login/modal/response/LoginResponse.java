@@ -15,11 +15,15 @@ public class LoginResponse {
     private String tokenType;
     private String fullName;
     private String username;
+    private String phone;
+    private String nameRole;
     public LoginResponse(UserSession userSession, User user) {
         this.accessToken =userSession.getAccessToken();
         this.refreshToken =userSession.getRefreshToken();
         this.tokenType =userSession.getTokenType();
         this.fullName = user.getFullName(); // Lấy từ thực thể User
         this.username = user.getUsername();
+        this.phone = user.getPhone();
+        this.nameRole= user.getRole().getName();
     }
 }

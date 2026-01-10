@@ -9,6 +9,7 @@ import com.example.demo.expection.ApiException;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.UserSessionRepository;
 import com.example.demo.security.JwtTokenProvider;
+import com.example.demo.uitl.RequestUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -38,15 +39,9 @@ public class AuthService {
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
         saveUserSession(user, accessToken, refreshToken, request);
+        String tokenType = "Bearer";
 
-        // Trả về kèm theo fullName và username
-        return new LoginResponse(
-                accessToken,
-                refreshToken,
-                "Bearer",
-                user.getFullName(),
-                user.getUsername()
-        );
+        return new LoginResponse(accessToken, refreshToken,tokenType , user.getFullName(), user.getUsername(),user.getPhone(), user.getRole().getName());
     }
     public User register(LoginRequest registerRequest) {
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
@@ -59,25 +54,26 @@ public class AuthService {
     }
 
     private void saveUserSession(User user, String accessToken, String refreshToken, HttpServletRequest request) {
-        try {
-            String ipAddress = request.getHeader("X-Forwarded-For");
-            if (ipAddress == null) {
-                ipAddress = request.getRemoteAddr();
-            }
-            String userAgent = request.getHeader("User-Agent");
-            UserSession session = new UserSession();
-            session.setUser(user);
-            session.setAccessToken(accessToken);
-            session.setRefreshToken(refreshToken);
-            session.setTokenType("Bearer");
-            session.setIpAddress(ipAddress);
-            session.setLastActive(LocalDateTime.now());
-            session.setLastActive(LocalDateTime.now());
-            session.setRevoked(false);
-            session.setLoginLocation("Hanoi, Vietnam");
-            sessionRepository.save(session);
-        } catch (Exception e) {
-            System.err.println("Lỗi lưu Session: " + e.getMessage());
-        }
+        UserSession session = new UserSession();
+        session.setUser(user);
+        session.setAccessToken(accessToken);
+        session.setRefreshToken(refreshToken);
+        session.setTokenType("Bearer");
+
+        // 1. Lấy IP thực
+        String ip = RequestUtils.getClientIp(request);
+        session.setIpAddress(ip);
+
+        // 2. Lấy thông tin thiết bị thực (Chrome, Windows, v.v.)
+        session.setDeviceType(RequestUtils.getDeviceType(request));
+
+        // 3. Lấy vị trí thực dựa trên IP
+        session.setLoginLocation(LocationService.getLocation(ip));
+
+        session.setLoginTime(LocalDateTime.now());
+        session.setLastActive(LocalDateTime.now());
+        session.setRevoked(false);
+
+        sessionRepository.save(session);
     }
 }
