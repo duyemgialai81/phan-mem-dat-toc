@@ -13,7 +13,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 
 @Service
@@ -40,7 +39,7 @@ public class AuthService {
     }
     public User register(LoginRequest registerRequest) {
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
-            throw new ApiException("Tên đăng nhập đã tồn tại", "USERNAME_ALREADY_EXISTS");
+            throw new ApiException("Tên đăng nhập đã tồn tại", "Vui long tạo tài khoản nếu bạn chưa có");
         }
         User newUser = new User();
         newUser.setUsername(registerRequest.getUsername());
