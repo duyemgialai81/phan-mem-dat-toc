@@ -40,8 +40,17 @@ public class AuthService {
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
         saveUserSession(user, accessToken, refreshToken, request);
-        String tokenType = "Bearer";
-        return new LoginResponse(accessToken, refreshToken,tokenType , user.getFullName(), user.getUsername(),user.getPhone(), user.getRole().getName());
+        String roleName = (user.getRole() != null) ? user.getRole().getName() : "USER";
+
+        return new LoginResponse(
+                accessToken,
+                refreshToken,
+                "Bearer",
+                user.getFullName(),
+                user.getUsername(),
+                user.getPhone(),
+                roleName
+        );
     }
     public User register(LoginRequest registerRequest) {
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
@@ -50,10 +59,16 @@ public class AuthService {
 
         User newUser = new User();
         newUser.setUsername(registerRequest.getUsername());
-        newUser.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+
+        // BẮT BUỘC: Phải mã hóa ở đây
+        String encodedPassword = passwordEncoder.encode(registerRequest.getPassword());
+        newUser.setPassword(encodedPassword);
+
+        // Gán role mặc định
         Role defaultRole = roleRepository.findByName("USER")
-                .orElseThrow(() -> new ApiException("Hệ thống chưa cấu hình quyền mặc định", "DEFAULT_ROLE_NOT_FOUND"));
+                .orElseThrow(() -> new ApiException("Role not found", "404"));
         newUser.setRole(defaultRole);
+
         return userRepository.save(newUser);
     }
 
