@@ -1,4 +1,4 @@
-package com.example.demo.core.login.Service;
+package com.example.demo.core.login.service;
 
 import org.springframework.web.client.RestTemplate;
 import java.util.Map;

@@ -1,4 +1,4 @@
-package com.example.demo.core.login.Service;
+package com.example.demo.core.login.service;
 
 
 import com.example.demo.core.login.modal.request.LoginRequest;

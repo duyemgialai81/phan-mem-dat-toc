@@ -1,14 +1,11 @@
-package com.example.demo.core.login.Controller;
+package com.example.demo.core.login.controller;
 
-import com.example.demo.core.login.Service.AuthService;
+import com.example.demo.core.login.service.AuthService;
 import com.example.demo.core.login.modal.request.LoginRequest;
 import com.example.demo.core.login.modal.request.RegisterRequest;
-import com.example.demo.core.login.modal.response.LoginResponse;
 import com.example.demo.entity.User;
-import com.example.demo.repository.UserRepository;
 import com.example.demo.uitl.ResponseObject;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 

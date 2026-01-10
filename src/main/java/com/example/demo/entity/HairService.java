@@ -12,7 +12,6 @@ public class HairService { // Tránh trùng tên Service của Spring
     private String name;
     private Double price;
     private Integer durationMin; // Thời gian làm (phút)
-
     @ManyToOne
     @JoinColumn(name = "category_id")
     private Category category;
