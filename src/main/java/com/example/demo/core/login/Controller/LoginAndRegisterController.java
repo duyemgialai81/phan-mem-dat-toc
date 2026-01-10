@@ -2,6 +2,7 @@ package com.example.demo.core.login.Controller;
 
 import com.example.demo.core.login.Service.AuthService;
 import com.example.demo.core.login.modal.request.LoginRequest;
+import com.example.demo.core.login.modal.request.RegisterRequest;
 import com.example.demo.core.login.modal.response.LoginResponse;
 import com.example.demo.entity.User;
 import com.example.demo.repository.UserRepository;
@@ -23,7 +24,7 @@ public class LoginAndRegisterController {
         return new ResponseObject<>( authService.login(loginRequest,request));
     }
     @PostMapping("/register")
-    public ResponseObject<?> register(@RequestBody LoginRequest registerRequest) {
+    public ResponseObject<?> register(@RequestBody RegisterRequest registerRequest) {
         User user = authService.register(registerRequest);
         return new ResponseObject<>("Đăng ký thành công tài khoản: " + user.getUsername());
     }
