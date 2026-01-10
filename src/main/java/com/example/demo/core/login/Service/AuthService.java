@@ -2,6 +2,7 @@ package com.example.demo.core.login.Service;
 
 
 import com.example.demo.core.login.modal.request.LoginRequest;
+import com.example.demo.core.login.modal.request.RegisterRequest;
 import com.example.demo.core.login.modal.response.LoginResponse;
 import com.example.demo.entity.Role;
 import com.example.demo.entity.User;
@@ -52,23 +53,19 @@ public class AuthService {
                 roleName
         );
     }
-    public User register(LoginRequest registerRequest) {
+    public User register(RegisterRequest registerRequest) {
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
             throw new ApiException("Tên đăng nhập đã tồn tại", "USERNAME_ALREADY_EXISTS");
         }
-
         User newUser = new User();
         newUser.setUsername(registerRequest.getUsername());
-
-        // BẮT BUỘC: Phải mã hóa ở đây
         String encodedPassword = passwordEncoder.encode(registerRequest.getPassword());
         newUser.setPassword(encodedPassword);
-
-        // Gán role mặc định
+        newUser.setFullName(registerRequest.getFullName());
+        newUser.setPhone(registerRequest.getPhone());
         Role defaultRole = roleRepository.findByName("USER")
                 .orElseThrow(() -> new ApiException("Role not found", "404"));
         newUser.setRole(defaultRole);
-
         return userRepository.save(newUser);
     }
 
