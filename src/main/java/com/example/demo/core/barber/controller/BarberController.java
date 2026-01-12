@@ -14,15 +14,12 @@ import java.util.List;
 @RequestMapping("/api-v1/barbers")
 @RequiredArgsConstructor
 public class BarberController {
-
     private final BarberService barberService;
-
     @GetMapping
     public ResponseEntity<?> getAllBarbers() {
         List<BarberResponse> barbers = barberService.getAllBarbers();
         return ResponseEntity.ok(new ResponseObject<>(barbers, "Lấy danh sách thợ cắt tóc thành công"));
     }
-
     @GetMapping("/{id}")
     public ResponseEntity<?> getBarberById(@PathVariable Long id) {
         BarberResponse barber = barberService.getBarberById(id);
