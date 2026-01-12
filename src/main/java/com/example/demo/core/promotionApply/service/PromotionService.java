@@ -6,6 +6,7 @@ import com.example.demo.entity.Promotion;
 import com.example.demo.expection.ApiException;
 import com.example.demo.repository.PromotionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PromotionService {
 
     private final PromotionRepository promotionRepository;
@@ -35,26 +37,42 @@ public class PromotionService {
     }
 
     public Map<String, Object> applyPromotion(PromotionApplyRequest request) {
-        Promotion promotion = promotionRepository.findByCode(request.getCode())
-                .orElseThrow(() -> new ApiException("Mã khuyến mãi không hợp lệ", "INVALID_CODE"));
+        log.info("Applying promotion with code: {}, orderAmount: {}",
+                request.getCode(), request.getOrderAmount());
 
-        if (promotion.getExpiryDate().isBefore(LocalDate.now())) {
-            throw new ApiException("Mã khuyến mãi đã hết hạn", "EXPIRED_CODE");
+        try {
+            Promotion promotion = promotionRepository.findByCode(request.getCode())
+                    .orElseThrow(() -> new ApiException("Mã khuyến mãi không hợp lệ", "INVALID_CODE"));
+
+            log.info("Found promotion: {}, discount: {}%",
+                    promotion.getCode(), promotion.getDiscountPercent());
+
+            if (promotion.getExpiryDate().isBefore(LocalDate.now())) {
+                throw new ApiException("Mã khuyến mãi đã hết hạn", "EXPIRED_CODE");
+            }
+
+            Double orderAmount = request.getOrderAmount() != null ? request.getOrderAmount() : 0.0;
+            Double discountAmount = orderAmount * (promotion.getDiscountPercent() / 100.0);
+            Double finalAmount = orderAmount - discountAmount;
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("promotionCode", promotion.getCode());
+            result.put("discountPercent", promotion.getDiscountPercent());
+            result.put("orderAmount", orderAmount);
+            result.put("discountAmount", discountAmount);
+            result.put("finalAmount", finalAmount);
+            result.put("message", "Áp dụng mã giảm giá thành công!");
+
+            log.info("Applied promotion successfully. Final amount: {}", finalAmount);
+            return result;
+
+        } catch (ApiException e) {
+            log.error("ApiException: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error applying promotion", e);
+            throw new RuntimeException("Lỗi khi áp dụng mã khuyến mãi: " + e.getMessage());
         }
-
-        Double orderAmount = request.getOrderAmount() != null ? request.getOrderAmount() : 0.0;
-        Double discountAmount = orderAmount * (promotion.getDiscountPercent() / 100.0);
-        Double finalAmount = orderAmount - discountAmount;
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("promotionCode", promotion.getCode());
-        result.put("discountPercent", promotion.getDiscountPercent());
-        result.put("orderAmount", orderAmount);
-        result.put("discountAmount", discountAmount);
-        result.put("finalAmount", finalAmount);
-        result.put("message", "Áp dụng mã giảm giá thành công!");
-
-        return result;
     }
 
     private PromotionResponse mapToResponse(Promotion promotion) {
