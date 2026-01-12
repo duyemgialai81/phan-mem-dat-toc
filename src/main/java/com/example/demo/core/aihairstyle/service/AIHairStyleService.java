@@ -1,9 +1,10 @@
 package com.example.demo.core.aihairstyle.service;
 
-import com.example.demo.entity.*;
-import com.example.demo.repository.*;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
+import com.example.demo.entity.*;
+import com.example.demo.expection.ApiException;
+import com.example.demo.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,16 +21,16 @@ import java.util.*;
 @Slf4j
 public class AIHairStyleService {
 
-    @Value("${huggingface.token:}")
+    @Value("${huggingface.token}")
     private String hfToken;
 
-    @Value("${cloudinary.cloud.name:}")
+    @Value("${cloudinary.cloud.name}")
     private String cloudinaryCloudName;
 
-    @Value("${cloudinary.api.key:}")
+    @Value("${cloudinary.api.key}")
     private String cloudinaryApiKey;
 
-    @Value("${cloudinary.api.secret:}")
+    @Value("${cloudinary.api.secret}")
     private String cloudinaryApiSecret;
 
     private final HairStyleSuggestionRepository suggestionRepository;
@@ -37,92 +38,94 @@ public class AIHairStyleService {
     private final UserRepository userRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // Hugging Face API endpoints
     private static final String HF_API_BASE = "https://api-inference.huggingface.co/models/";
-
-    // Models
-    private static final String FACE_DETECTION_MODEL = "dima806/face_age_gender";
     private static final String IMAGE_GENERATION_MODEL = "stabilityai/stable-diffusion-2-1";
-    private static final String FACE_SWAP_MODEL = "deepinsight/insightface";
 
     /**
-     * Upload ảnh lên Cloudinary
+     * Upload ảnh lên Cloudinary với error handling
      */
     public String uploadImage(MultipartFile file) throws Exception {
         log.info("Uploading image to Cloudinary...");
 
-        Cloudinary cloudinary = new Cloudinary(ObjectUtils.asMap(
-                "cloud_name", cloudinaryCloudName,
-                "api_key", cloudinaryApiKey,
-                "api_secret", cloudinaryApiSecret
-        ));
-
-        Map uploadResult = cloudinary.uploader().upload(file.getBytes(),
-                ObjectUtils.asMap("folder", "hair_styles"));
-
-        String imageUrl = (String) uploadResult.get("secure_url");
-        log.info("Image uploaded successfully: {}", imageUrl);
-
-        return imageUrl;
-    }
-
-    /**
-     * Phân tích khuôn mặt bằng Hugging Face
-     */
-    public Map<String, Object> analyzeFace(String imageUrl) {
-        log.info("Analyzing face with Hugging Face...");
-
-        String apiUrl = HF_API_BASE + FACE_DETECTION_MODEL;
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(hfToken);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("inputs", imageUrl);
-
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
         try {
-            ResponseEntity<List> response = restTemplate.exchange(
-                    apiUrl, HttpMethod.POST, request, List.class
-            );
-
-            List<Map<String, Object>> results = response.getBody();
-
-            if (results != null && !results.isEmpty()) {
-                Map<String, Object> analysis = results.get(0);
-
-                // Parse results
-                Map<String, Object> faceData = new HashMap<>();
-                faceData.put("face_shape", determineFaceShape(analysis));
-                faceData.put("skin_tone", "medium");
-                faceData.put("confidence", 0.85);
-
-                return faceData;
+            // Validate file
+            if (file == null || file.isEmpty()) {
+                throw new ApiException("File không hợp lệ", "INVALID_FILE");
             }
 
+            // Validate file size (max 5MB)
+            if (file.getSize() > 5 * 1024 * 1024) {
+                throw new ApiException("File quá lớn. Tối đa 5MB", "FILE_TOO_LARGE");
+            }
+
+            // Validate file type
+            String contentType = file.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                throw new ApiException("File phải là ảnh (jpg, png, etc)", "INVALID_FILE_TYPE");
+            }
+
+            log.info("File info - Name: {}, Size: {} bytes, Type: {}",
+                    file.getOriginalFilename(), file.getSize(), contentType);
+
+            // Create Cloudinary instance
+            Cloudinary cloudinary = new Cloudinary(ObjectUtils.asMap(
+                    "cloud_name", cloudinaryCloudName,
+                    "api_key", cloudinaryApiKey,
+                    "api_secret", cloudinaryApiSecret,
+                    "secure", true
+            ));
+
+            log.info("Cloudinary config - Cloud name: {}", cloudinaryCloudName);
+
+            // Upload
+            Map uploadResult = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", "hair_styles",
+                            "resource_type", "image",
+                            "transformation", ObjectUtils.asMap(
+                                    "quality", "auto",
+                                    "fetch_format", "auto"
+                            )
+                    )
+            );
+
+            String imageUrl = (String) uploadResult.get("secure_url");
+            log.info("Image uploaded successfully: {}", imageUrl);
+
+            return imageUrl;
+
+        } catch (ApiException e) {
+            log.error("Validation error: {}", e.getMessage());
+            throw e;
         } catch (Exception e) {
-            log.error("Error analyzing face", e);
+            log.error("Error uploading to Cloudinary", e);
+            throw new ApiException("Không thể upload ảnh: " + e.getMessage(), "UPLOAD_ERROR");
         }
-
-        // Default fallback
-        Map<String, Object> defaultData = new HashMap<>();
-        defaultData.put("face_shape", "oval");
-        defaultData.put("skin_tone", "medium");
-        defaultData.put("confidence", 0.75);
-
-        return defaultData;
     }
 
     /**
-     * Generate hair style preview bằng Hugging Face
+     * Phân tích khuôn mặt
+     */
+    public Map<String, Object> analyzeFace(String imageUrl) {
+        log.info("Analyzing face...");
+
+        // Simplified - return default values
+        Map<String, Object> faceData = new HashMap<>();
+        faceData.put("face_shape", "oval");
+        faceData.put("skin_tone", "medium");
+        faceData.put("confidence", 0.85);
+
+        return faceData;
+    }
+
+    /**
+     * Generate hair style preview
      */
     public String generateHairStylePreview(String faceImageUrl, String styleImageUrl, String styleDescription) {
-        log.info("Generating hair style preview with Hugging Face...");
+        log.info("Generating hair style preview...");
 
         try {
-            // Option 1: Text-to-Image with face guidance
             String prompt = String.format(
                     "professional hair salon photo, %s hair style, " +
                             "realistic, high quality, sharp focus, professional lighting, " +
@@ -132,19 +135,18 @@ public class AIHairStyleService {
 
             byte[] generatedImage = generateImageFromPrompt(prompt);
 
-            // Upload result to Cloudinary
             return uploadGeneratedImage(generatedImage);
 
         } catch (Exception e) {
-            log.error("Error generating hair style preview", e);
-            throw new RuntimeException("Failed to generate preview: " + e.getMessage());
+            log.error("Error generating preview", e);
+            throw new ApiException("Không thể tạo preview: " + e.getMessage(), "GENERATION_ERROR");
         }
     }
 
     /**
      * Generate image từ text prompt
      */
-    public byte[] generateImageFromPrompt(String prompt) throws Exception {
+    private byte[] generateImageFromPrompt(String prompt) throws Exception {
         String apiUrl = HF_API_BASE + IMAGE_GENERATION_MODEL;
 
         HttpHeaders headers = new HttpHeaders();
@@ -155,15 +157,15 @@ public class AIHairStyleService {
         body.put("inputs", prompt);
         body.put("parameters", Map.of(
                 "num_inference_steps", 30,
-                "guidance_scale", 7.5,
-                "negative_prompt", "blurry, low quality, distorted, ugly"
+                "guidance_scale", 7.5
         ));
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        // Retry logic for model loading
+        // Retry logic
         for (int i = 0; i < 3; i++) {
             try {
+                log.info("Calling Hugging Face API - attempt {}/3", i + 1);
                 byte[] imageBytes = restTemplate.postForObject(apiUrl, request, byte[].class);
 
                 if (imageBytes != null && imageBytes.length > 0) {
@@ -172,7 +174,7 @@ public class AIHairStyleService {
                 }
             } catch (Exception e) {
                 if (i < 2) {
-                    log.warn("Retry {} - Model might be loading, waiting 5s...", i + 1);
+                    log.warn("Retry {} - waiting 5s...", i + 1);
                     Thread.sleep(5000);
                 } else {
                     throw e;
@@ -184,19 +186,36 @@ public class AIHairStyleService {
     }
 
     /**
-     * Upload generated image (byte array) to Cloudinary
+     * Upload generated image to Cloudinary
      */
     private String uploadGeneratedImage(byte[] imageBytes) throws Exception {
-        Cloudinary cloudinary = new Cloudinary(ObjectUtils.asMap(
-                "cloud_name", cloudinaryCloudName,
-                "api_key", cloudinaryApiKey,
-                "api_secret", cloudinaryApiSecret
-        ));
+        log.info("Uploading generated image to Cloudinary...");
 
-        Map uploadResult = cloudinary.uploader().upload(imageBytes,
-                ObjectUtils.asMap("folder", "hair_styles/generated"));
+        try {
+            Cloudinary cloudinary = new Cloudinary(ObjectUtils.asMap(
+                    "cloud_name", cloudinaryCloudName,
+                    "api_key", cloudinaryApiKey,
+                    "api_secret", cloudinaryApiSecret,
+                    "secure", true
+            ));
 
-        return (String) uploadResult.get("secure_url");
+            Map uploadResult = cloudinary.uploader().upload(
+                    imageBytes,
+                    ObjectUtils.asMap(
+                            "folder", "hair_styles/generated",
+                            "resource_type", "image"
+                    )
+            );
+
+            String imageUrl = (String) uploadResult.get("secure_url");
+            log.info("Generated image uploaded: {}", imageUrl);
+
+            return imageUrl;
+
+        } catch (Exception e) {
+            log.error("Error uploading generated image", e);
+            throw new ApiException("Không thể upload ảnh AI: " + e.getMessage(), "UPLOAD_ERROR");
+        }
     }
 
     /**
@@ -210,72 +229,67 @@ public class AIHairStyleService {
 
         log.info("Creating hair style suggestion for user: {}, template: {}", userId, templateId);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        try {
+            // 1. Validate
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ApiException("Không tìm thấy người dùng", "USER_NOT_FOUND"));
 
-        HairStyleTemplate template = templateRepository.findById(templateId)
-                .orElseThrow(() -> new RuntimeException("Template not found"));
+            HairStyleTemplate template = templateRepository.findById(templateId)
+                    .orElseThrow(() -> new ApiException("Không tìm thấy mẫu kiểu tóc", "TEMPLATE_NOT_FOUND"));
 
-        // 1. Upload ảnh khuôn mặt lên Cloudinary
-        log.info("Step 1: Uploading face image...");
-        String faceImageUrl = uploadImage(faceImage);
+            // 2. Upload ảnh khuôn mặt
+            log.info("Step 1: Uploading face image...");
+            String faceImageUrl = uploadImage(faceImage);
 
-        // 2. Phân tích khuôn mặt
-        log.info("Step 2: Analyzing face...");
-        Map<String, Object> faceAnalysis = analyzeFace(faceImageUrl);
+            // 3. Phân tích khuôn mặt
+            log.info("Step 2: Analyzing face...");
+            Map<String, Object> faceAnalysis = analyzeFace(faceImageUrl);
 
-        // 3. Generate preview với AI
-        log.info("Step 3: Generating hair style preview...");
-        String styleDescription = String.format("%s %s hair style",
-                template.getLength().toLowerCase(),
-                template.getName()
-        );
-        String resultImageUrl = generateHairStylePreview(
-                faceImageUrl,
-                template.getImageUrl(),
-                styleDescription
-        );
+            // 4. Generate preview
+            log.info("Step 3: Generating hair style preview...");
+            String styleDescription = String.format("%s %s hair style",
+                    template.getLength().toLowerCase(),
+                    template.getName()
+            );
+            String resultImageUrl = generateHairStylePreview(
+                    faceImageUrl,
+                    template.getImageUrl(),
+                    styleDescription
+            );
 
-        // 4. Lưu kết quả vào database
-        log.info("Step 4: Saving suggestion...");
-        HairStyleSuggestion suggestion = new HairStyleSuggestion();
-        suggestion.setUser(user);
-        suggestion.setOriginalImageUrl(faceImageUrl);
-        suggestion.setStyleImageUrl(template.getImageUrl());
-        suggestion.setResultImageUrl(resultImageUrl);
-        suggestion.setFaceShape((String) faceAnalysis.getOrDefault("face_shape", "oval"));
-        suggestion.setSkinTone((String) faceAnalysis.getOrDefault("skin_tone", "medium"));
-        suggestion.setHairTexture(template.getLength());
-        suggestion.setHairLength(template.getLength());
-        suggestion.setAiAnalysis(String.format(
-                "AI-generated preview for %s style. Recommended for %s face shape.",
-                template.getName(),
-                faceAnalysis.get("face_shape")
-        ));
-        suggestion.setConfidenceScore(85);
-        suggestion.setCreatedAt(LocalDateTime.now());
+            // 5. Lưu kết quả
+            log.info("Step 4: Saving suggestion...");
+            HairStyleSuggestion suggestion = new HairStyleSuggestion();
+            suggestion.setUser(user);
+            suggestion.setOriginalImageUrl(faceImageUrl);
+            suggestion.setStyleImageUrl(template.getImageUrl());
+            suggestion.setResultImageUrl(resultImageUrl);
+            suggestion.setFaceShape((String) faceAnalysis.getOrDefault("face_shape", "oval"));
+            suggestion.setSkinTone((String) faceAnalysis.getOrDefault("skin_tone", "medium"));
+            suggestion.setHairTexture(template.getLength());
+            suggestion.setHairLength(template.getLength());
+            suggestion.setAiAnalysis(String.format(
+                    "AI-generated preview for %s style. Recommended for %s face shape.",
+                    template.getName(),
+                    faceAnalysis.get("face_shape")
+            ));
+            suggestion.setConfidenceScore(85);
+            suggestion.setCreatedAt(LocalDateTime.now());
 
-        HairStyleSuggestion saved = suggestionRepository.save(suggestion);
-        log.info("Suggestion created successfully with ID: {}", saved.getId());
+            HairStyleSuggestion saved = suggestionRepository.save(suggestion);
+            log.info("Suggestion created successfully with ID: {}", saved.getId());
 
-        return saved;
+            return saved;
+
+        } catch (ApiException e) {
+            log.error("Business logic error: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected error creating suggestion", e);
+            throw new ApiException("Lỗi không xác định: " + e.getMessage(), "UNKNOWN_ERROR");
+        }
     }
 
-    /**
-     * Helper: Determine face shape from analysis
-     */
-    private String determineFaceShape(Map<String, Object> analysis) {
-        // Logic để xác định khuôn mặt dựa trên AI analysis
-        // Có thể dùng các measurements như: face width, jaw width, forehead width
-
-        // Default fallback
-        String[] faceShapes = {"oval", "round", "square", "heart", "diamond"};
-        return faceShapes[new Random().nextInt(faceShapes.length)];
-    }
-
-    /**
-     * Lấy danh sách template
-     */
     public List<HairStyleTemplate> getTemplates(String gender, String length) {
         log.info("Getting templates - gender: {}, length: {}", gender, length);
 
@@ -287,9 +301,6 @@ public class AIHairStyleService {
         return templateRepository.findByIsActiveTrue();
     }
 
-    /**
-     * Lấy lịch sử suggestions của user
-     */
     public List<HairStyleSuggestion> getMySuggestions(Long userId) {
         return suggestionRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
