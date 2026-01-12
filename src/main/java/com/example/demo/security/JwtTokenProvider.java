@@ -57,7 +57,7 @@ public class JwtTokenProvider {
     // Backward compatibility - generate token from Authentication
 //    public String generateToken(Authentication authentication) {
 //        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-//        return generateAccessToken(userPrincipal.getName());
+//        return generateAccessToken(Long.valueOf(userPrincipal.getName()));
 //    }
 
     public String getUserIdFromToken(String token) {
