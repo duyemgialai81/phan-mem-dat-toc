@@ -55,7 +55,7 @@ public class AIHairStyleController {
     @GetMapping("/my-suggestions")
     public ResponseEntity<?> getMySuggestions(@AuthenticationPrincipal UserDetails userDetails) {
         Long userId = getUserId(userDetails);
-        // Implementation
-        return ResponseEntity.ok(new ResponseObject<>(null, "Success"));
+        List<HairStyleSuggestion> suggestions = aiHairStyleService.getMySuggestions(userId);
+        return ResponseEntity.ok(new ResponseObject<>(suggestions, "Lấy lịch sử thành công"));
     }
 }
