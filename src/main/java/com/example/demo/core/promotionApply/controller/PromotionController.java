@@ -1,6 +1,7 @@
 package com.example.demo.core.promotionApply.controller;
 
 import com.example.demo.core.promotionApply.modal.request.PromotionApplyRequest;
+import com.example.demo.core.promotionApply.modal.response.PromotionApplyResponse;
 import com.example.demo.core.promotionApply.modal.response.PromotionResponse;
 import com.example.demo.core.promotionApply.service.PromotionService;
 import com.example.demo.uitl.ResponseObject;
@@ -30,7 +31,7 @@ public class PromotionController {
     }
     @PostMapping("/apply")
     public ResponseEntity<?> applyPromotion(@RequestBody PromotionApplyRequest request) {
-        Map<String, Object> result = promotionService.applyPromotion(request);
+        PromotionApplyResponse result = promotionService.applyPromotion(request);
         return ResponseEntity.ok(new ResponseObject<>(result, "Áp dụng mã giảm giá thành công"));
     }
 }
