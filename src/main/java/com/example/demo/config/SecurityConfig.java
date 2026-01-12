@@ -19,14 +19,16 @@ public class SecurityConfig {
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api-v1/login/**", "/api-v1/register/**", "/api-v1/public/**").permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api-v1/login/**", "/api-v1/register/**").permitAll()
+                        .requestMatchers("/api-v1/**").authenticated()
+                        .anyRequest().permitAll()
                 );
         return http.build();
     }
