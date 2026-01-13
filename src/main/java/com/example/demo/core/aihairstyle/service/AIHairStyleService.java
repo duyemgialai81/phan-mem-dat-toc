@@ -37,13 +37,16 @@ public class AIHairStyleService {
     private final UserRepository userRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // Hugging Face API endpoints - UPDATED
-    private static final String HF_API_BASE = "https://router.huggingface.co/models/";
+    // Hugging Face API endpoints - CẬP NHẬT MỚI
+    private static final String HF_INFERENCE_API = "https://api-inference.huggingface.co/models/";
 
-    // Models
+    // Models - Sử dụng models khác còn hoạt động
     private static final String FACE_DETECTION_MODEL = "dima806/face_age_gender";
-    private static final String IMAGE_GENERATION_MODEL = "stabilityai/stable-diffusion-2-1";
-    private static final String FACE_SWAP_MODEL = "deepinsight/insightface";
+    // Thay đổi model generation - SD 2.1 có thể đã bị deprecated
+    private static final String IMAGE_GENERATION_MODEL = "stabilityai/stable-diffusion-xl-base-1.0";
+    // Hoặc dùng model khác:
+    // private static final String IMAGE_GENERATION_MODEL = "runwayml/stable-diffusion-v1-5";
+    // private static final String IMAGE_GENERATION_MODEL = "prompthero/openjourney";
 
     /**
      * Upload ảnh lên Cloudinary
@@ -72,7 +75,7 @@ public class AIHairStyleService {
     public Map<String, Object> analyzeFace(String imageUrl) {
         log.info("Analyzing face with Hugging Face...");
 
-        String apiUrl = HF_API_BASE + FACE_DETECTION_MODEL;
+        String apiUrl = HF_INFERENCE_API + FACE_DETECTION_MODEL;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(hfToken);
@@ -122,11 +125,11 @@ public class AIHairStyleService {
         log.info("Generating hair style preview with Hugging Face...");
 
         try {
-            // Option 1: Text-to-Image with face guidance
+            // Text-to-Image with improved prompt
             String prompt = String.format(
-                    "professional hair salon photo, %s hair style, " +
-                            "realistic, high quality, sharp focus, professional lighting, " +
-                            "front view portrait, photorealistic",
+                    "professional hair salon photo, person with %s hairstyle, " +
+                            "realistic portrait, high quality, sharp focus, professional lighting, " +
+                            "front view, photorealistic, detailed hair, 4k",
                     styleDescription
             );
 
@@ -142,40 +145,64 @@ public class AIHairStyleService {
     }
 
     /**
-     * Generate image từ text prompt
+     * Generate image từ text prompt - CẬP NHẬT
      */
     public byte[] generateImageFromPrompt(String prompt) throws Exception {
-        String apiUrl = HF_API_BASE + IMAGE_GENERATION_MODEL;
+        String apiUrl = HF_INFERENCE_API + IMAGE_GENERATION_MODEL;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(hfToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_OCTET_STREAM));
 
         Map<String, Object> body = new HashMap<>();
         body.put("inputs", prompt);
-        body.put("parameters", Map.of(
-                "num_inference_steps", 30,
-                "guidance_scale", 7.5,
-                "negative_prompt", "blurry, low quality, distorted, ugly"
-        ));
+
+        // Simplified parameters
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("num_inference_steps", 25);
+        parameters.put("guidance_scale", 7.5);
+        body.put("parameters", parameters);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        // Retry logic for model loading
-        for (int i = 0; i < 3; i++) {
+        // Retry logic với error handling tốt hơn
+        int maxRetries = 5;
+        for (int i = 0; i < maxRetries; i++) {
             try {
-                byte[] imageBytes = restTemplate.postForObject(apiUrl, request, byte[].class);
+                log.info("Attempt {} - Calling Hugging Face API: {}", i + 1, apiUrl);
+
+                ResponseEntity<byte[]> response = restTemplate.exchange(
+                        apiUrl,
+                        HttpMethod.POST,
+                        request,
+                        byte[].class
+                );
+
+                byte[] imageBytes = response.getBody();
 
                 if (imageBytes != null && imageBytes.length > 0) {
                     log.info("Image generated successfully, size: {} bytes", imageBytes.length);
                     return imageBytes;
                 }
             } catch (Exception e) {
-                if (i < 2) {
-                    log.warn("Retry {} - Model might be loading, waiting 5s...", i + 1);
-                    Thread.sleep(5000);
-                } else {
-                    throw e;
+                log.error("Error on attempt {}: {}", i + 1, e.getMessage());
+
+                // Nếu là lỗi 503 (model loading) hoặc 429 (rate limit)
+                if (e.getMessage().contains("503") || e.getMessage().contains("Model") ||
+                        e.getMessage().contains("loading") || e.getMessage().contains("429")) {
+
+                    if (i < maxRetries - 1) {
+                        int waitTime = (i + 1) * 10; // Tăng thời gian chờ: 10s, 20s, 30s...
+                        log.warn("Model is loading or rate limited. Waiting {} seconds...", waitTime);
+                        Thread.sleep(waitTime * 1000L);
+                        continue;
+                    }
+                }
+
+                // Nếu đã hết retry hoặc lỗi khác
+                if (i == maxRetries - 1) {
+                    throw new RuntimeException("Failed to generate image after " + maxRetries + " attempts: " + e.getMessage());
                 }
             }
         }
@@ -265,10 +292,6 @@ public class AIHairStyleService {
      * Helper: Determine face shape from analysis
      */
     private String determineFaceShape(Map<String, Object> analysis) {
-        // Logic để xác định khuôn mặt dựa trên AI analysis
-        // Có thể dùng các measurements như: face width, jaw width, forehead width
-
-        // Default fallback
         String[] faceShapes = {"oval", "round", "square", "heart", "diamond"};
         return faceShapes[new Random().nextInt(faceShapes.length)];
     }
