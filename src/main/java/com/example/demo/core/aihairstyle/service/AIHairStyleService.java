@@ -37,16 +37,12 @@ public class AIHairStyleService {
     private final UserRepository userRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // Hugging Face API endpoints - CẬP NHẬT MỚI
-    private static final String HF_INFERENCE_API = "https://api-inference.huggingface.co/models/";
+    // ✅ FIXED: Đổi sang router.huggingface.co
+    private static final String HF_API_BASE = "https://router.huggingface.co/models/";
 
-    // Models - Sử dụng models khác còn hoạt động
+    // Models - Sử dụng model ổn định
     private static final String FACE_DETECTION_MODEL = "dima806/face_age_gender";
-    // Thay đổi model generation - SD 2.1 có thể đã bị deprecated
-    private static final String IMAGE_GENERATION_MODEL = "stabilityai/stable-diffusion-xl-base-1.0";
-    // Hoặc dùng model khác:
-    // private static final String IMAGE_GENERATION_MODEL = "runwayml/stable-diffusion-v1-5";
-    // private static final String IMAGE_GENERATION_MODEL = "prompthero/openjourney";
+    private static final String IMAGE_GENERATION_MODEL = "runwayml/stable-diffusion-v1-5";
 
     /**
      * Upload ảnh lên Cloudinary
@@ -75,7 +71,7 @@ public class AIHairStyleService {
     public Map<String, Object> analyzeFace(String imageUrl) {
         log.info("Analyzing face with Hugging Face...");
 
-        String apiUrl = HF_INFERENCE_API + FACE_DETECTION_MODEL;
+        String apiUrl = HF_API_BASE + FACE_DETECTION_MODEL;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(hfToken);
@@ -127,9 +123,9 @@ public class AIHairStyleService {
         try {
             // Text-to-Image with improved prompt
             String prompt = String.format(
-                    "professional hair salon photo, person with %s hairstyle, " +
-                            "realistic portrait, high quality, sharp focus, professional lighting, " +
-                            "front view, photorealistic, detailed hair, 4k",
+                    "professional portrait photo, person with %s hairstyle, " +
+                            "realistic, high quality, sharp focus, studio lighting, " +
+                            "front view, photorealistic, detailed hair texture, 8k uhd",
                     styleDescription
             );
 
@@ -145,10 +141,10 @@ public class AIHairStyleService {
     }
 
     /**
-     * Generate image từ text prompt - CẬP NHẬT
+     * Generate image từ text prompt với retry logic
      */
     public byte[] generateImageFromPrompt(String prompt) throws Exception {
-        String apiUrl = HF_INFERENCE_API + IMAGE_GENERATION_MODEL;
+        String apiUrl = HF_API_BASE + IMAGE_GENERATION_MODEL;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(hfToken);
@@ -160,14 +156,15 @@ public class AIHairStyleService {
 
         // Simplified parameters
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put("num_inference_steps", 25);
+        parameters.put("num_inference_steps", 30);
         parameters.put("guidance_scale", 7.5);
+        parameters.put("negative_prompt", "blurry, low quality, bad anatomy, distorted face, ugly");
         body.put("parameters", parameters);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-        // Retry logic với error handling tốt hơn
-        int maxRetries = 5;
+        // Retry logic với error handling
+        int maxRetries = 10;
         for (int i = 0; i < maxRetries; i++) {
             try {
                 log.info("Attempt {} - Calling Hugging Face API: {}", i + 1, apiUrl);
@@ -186,23 +183,34 @@ public class AIHairStyleService {
                     return imageBytes;
                 }
             } catch (Exception e) {
-                log.error("Error on attempt {}: {}", i + 1, e.getMessage());
+                String errorMsg = e.getMessage();
+                log.error("Error on attempt {}: {}", i + 1, errorMsg);
 
-                // Nếu là lỗi 503 (model loading) hoặc 429 (rate limit)
-                if (e.getMessage().contains("503") || e.getMessage().contains("Model") ||
-                        e.getMessage().contains("loading") || e.getMessage().contains("429")) {
-
+                // Nếu là lỗi 503 (model loading), 429 (rate limit), hoặc 202 (model loading)
+                if (errorMsg != null && (
+                        errorMsg.contains("503") ||
+                                errorMsg.contains("429") ||
+                                errorMsg.contains("202") ||
+                                errorMsg.contains("Model") ||
+                                errorMsg.contains("loading") ||
+                                errorMsg.contains("estimated_time")
+                )) {
                     if (i < maxRetries - 1) {
-                        int waitTime = (i + 1) * 10; // Tăng thời gian chờ: 10s, 20s, 30s...
-                        log.warn("Model is loading or rate limited. Waiting {} seconds...", waitTime);
+                        // Exponential backoff: 10s, 15s, 20s, 25s...
+                        int waitTime = 10 + (i * 5);
+                        log.warn("Model is loading or rate limited. Waiting {} seconds... (Attempt {}/{})",
+                                waitTime, i + 1, maxRetries);
                         Thread.sleep(waitTime * 1000L);
                         continue;
                     }
                 }
 
-                // Nếu đã hết retry hoặc lỗi khác
+                // Nếu đã hết retry
                 if (i == maxRetries - 1) {
-                    throw new RuntimeException("Failed to generate image after " + maxRetries + " attempts: " + e.getMessage());
+                    throw new RuntimeException(
+                            "Failed to generate image after " + maxRetries + " attempts. " +
+                                    "The AI model may be unavailable or loading. Please try again later."
+                    );
                 }
             }
         }
