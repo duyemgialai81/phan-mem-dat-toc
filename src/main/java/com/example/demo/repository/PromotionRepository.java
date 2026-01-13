@@ -10,6 +10,7 @@ import java.util.Optional;
 
 @Repository
 public interface PromotionRepository extends JpaRepository<Promotion, Long> {
+    List<Promotion> findByExpiryDateAfter(LocalDate date);
     Optional<Promotion> findByCode(String code);
     List<Promotion> findByExpiryDateGreaterThanEqual(LocalDate date);
 }

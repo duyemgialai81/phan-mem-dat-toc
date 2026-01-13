@@ -3,6 +3,7 @@ package com.example.demo.core.promotionApply.service;
 import com.example.demo.core.promotionApply.modal.request.PromotionApplyRequest;
 import com.example.demo.core.promotionApply.modal.response.PromotionApplyResponse;
 import com.example.demo.core.promotionApply.modal.response.PromotionResponse;
+import com.example.demo.core.promotionApply.modal.response.PromotionUsageResponse;
 import com.example.demo.entity.Promotion;
 import com.example.demo.entity.User;
 import com.example.demo.entity.UserPromotion;
@@ -18,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +33,9 @@ public class PromotionService {
     private final UserPromotionRepository userPromotionRepository;
     private final UserRepository userRepository;
 
+    /**
+     * Lấy tất cả promotion đang active
+     */
     public List<PromotionResponse> getActivePromotions() {
         return promotionRepository.findByExpiryDateGreaterThanEqual(LocalDate.now())
                 .stream()
@@ -37,6 +43,9 @@ public class PromotionService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Lấy tất cả promotion
+     */
     public List<PromotionResponse> getAllPromotions() {
         return promotionRepository.findAll()
                 .stream()
@@ -44,6 +53,80 @@ public class PromotionService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Kiểm tra user đã sử dụng promotion chưa (theo ID)
+     */
+    public boolean hasUserUsedPromotion(Long userId, Long promotionId) {
+        log.info("Checking if user {} has used promotion {}", userId, promotionId);
+        return userPromotionRepository.existsByUserIdAndPromotionId(userId, promotionId);
+    }
+
+    /**
+     * Kiểm tra user đã sử dụng promotion chưa (theo code)
+     */
+    public boolean hasUserUsedPromotionByCode(Long userId, String code) {
+        log.info("Checking if user {} has used promotion code: {}", userId, code);
+
+        // Tìm promotion theo code
+        Promotion promotion = promotionRepository.findByCode(code)
+                .orElseThrow(() -> new ApiException("Mã giảm giá không tồn tại", "CODE_NOT_FOUND"));
+
+        return userPromotionRepository.existsByUserIdAndPromotionId(userId, promotion.getId());
+    }
+
+    /**
+     * Kiểm tra nhiều promotion cùng lúc
+     */
+    public Map<Long, Boolean> checkPromotionsUsedBatch(Long userId, List<Long> promotionIds) {
+        log.info("Checking batch promotions for user {}: {}", userId, promotionIds);
+
+        Map<Long, Boolean> results = new HashMap<>();
+
+        for (Long promotionId : promotionIds) {
+            boolean isUsed = userPromotionRepository.existsByUserIdAndPromotionId(userId, promotionId);
+            results.put(promotionId, isUsed);
+        }
+
+        return results;
+    }
+
+    /**
+     * Lấy danh sách promotion đã sử dụng
+     */
+    public List<PromotionUsageResponse> getUsedPromotionsByUser(Long userId) {
+        log.info("Getting used promotions for user: {}", userId);
+
+        List<UserPromotion> usages = userPromotionRepository.findByUserIdOrderByUsedAtDesc(userId);
+
+        return usages.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Lấy promotion available cho user (chưa dùng)
+     */
+    public List<PromotionResponse> getAvailablePromotionsForUser(Long userId) {
+        log.info("Getting available promotions for user: {}", userId);
+
+        // Lấy tất cả promotion còn hạn
+        List<Promotion> activePromotions = promotionRepository
+                .findByExpiryDateGreaterThanEqual(LocalDate.now());
+
+        // Filter ra những mã user chưa dùng và map sang response
+        return activePromotions.stream()
+                .map(promotion -> {
+                    PromotionResponse response = mapToResponse(promotion);
+                    // Đánh dấu promotion đã dùng hay chưa
+                    response.setIsUsed(userPromotionRepository.existsByUserIdAndPromotionId(userId, promotion.getId()));
+                    return response;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Áp dụng promotion
+     */
     @Transactional
     public PromotionApplyResponse applyPromotion(Long userId, PromotionApplyRequest request) {
         log.info("User {} applying promotion with code: {}, orderAmount: {}",
@@ -62,7 +145,7 @@ public class PromotionService {
                     promotion.getCode(), promotion.getDiscountPercent());
 
             // Kiểm tra user đã dùng mã này chưa
-            if (userPromotionRepository.existsByUserIdAndPromotionId(userId, promotion.getId())) {
+            if (hasUserUsedPromotion(userId, promotion.getId())) {
                 throw new ApiException("Bạn đã sử dụng mã khuyến mãi này rồi", "ALREADY_USED");
             }
 
@@ -106,23 +189,34 @@ public class PromotionService {
         }
     }
 
-    public List<PromotionResponse> getAvailablePromotionsForUser(Long userId) {
-        // Lấy tất cả promotion còn hạn
-        List<Promotion> activePromotions = promotionRepository
-                .findByExpiryDateGreaterThanEqual(LocalDate.now());
-
-        // Filter ra những mã user chưa dùng
-        return activePromotions.stream()
-                .filter(promotion -> !userPromotionRepository.existsByUserIdAndPromotionId(userId, promotion.getId()))
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
+    /**
+     * Map Promotion entity sang PromotionResponse
+     */
     private PromotionResponse mapToResponse(Promotion promotion) {
         PromotionResponse response = MapperUtils.map(promotion, PromotionResponse.class);
         response.setIsActive(promotion.getExpiryDate() != null &&
                 (promotion.getExpiryDate().isAfter(LocalDate.now()) ||
                         promotion.getExpiryDate().isEqual(LocalDate.now())));
         return response;
+    }
+
+    /**
+     * Convert UserPromotion entity sang PromotionUsageResponse
+     */
+    private PromotionUsageResponse convertToDTO(UserPromotion userPromotion) {
+        PromotionUsageResponse dto = new PromotionUsageResponse();
+        dto.setId(userPromotion.getId());
+        dto.setPromotionId(userPromotion.getPromotion().getId());
+        dto.setPromotionCode(userPromotion.getPromotion().getCode());
+        dto.setDiscountPercent(userPromotion.getPromotion().getDiscountPercent());
+        dto.setUsedAt(userPromotion.getUsedAt());
+        dto.setOrderAmount(userPromotion.getOrderAmount());
+        dto.setDiscountAmount(userPromotion.getDiscountAmount());
+
+        // Tính finalAmount
+        double finalAmount = userPromotion.getOrderAmount() - userPromotion.getDiscountAmount();
+        dto.setFinalAmount(finalAmount);
+
+        return dto;
     }
 }
