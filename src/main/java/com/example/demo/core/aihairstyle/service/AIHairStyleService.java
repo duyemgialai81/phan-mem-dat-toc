@@ -37,8 +37,8 @@ public class AIHairStyleService {
     private final UserRepository userRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    // Hugging Face API endpoints
-    private static final String HF_API_BASE = "https://api-inference.huggingface.co/models/";
+    // Hugging Face API endpoints - UPDATED
+    private static final String HF_API_BASE = "https://router.huggingface.co/models/";
 
     // Models
     private static final String FACE_DETECTION_MODEL = "dima806/face_age_gender";
