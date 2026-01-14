@@ -14,13 +14,14 @@ public class RestTemplateConfig {
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        // Sử dụng ClientHttpRequestFactorySettings để tránh lỗi Deprecated
-        ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.defaults()
-                .withConnectTimeout(Duration.ofSeconds(60000)) // Đợi kết nối 60s
-                .withReadTimeout(Duration.ofSeconds(60000));    // Đợi AI xử lý 60s
-
         return builder
-                .requestFactorySettings(settings)
+                .requestFactory(() -> {
+                    var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+                    // Tăng lên 90s để khớp với thời gian xử lý ảnh của Python
+                    factory.setConnectTimeout(90000);
+                    factory.setReadTimeout(90000);
+                    return factory;
+                })
                 .build();
     }
 }
