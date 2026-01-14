@@ -16,8 +16,8 @@ public class RestTemplateConfig {
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
         // Sử dụng ClientHttpRequestFactorySettings để tránh lỗi Deprecated
         ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.defaults()
-                .withConnectTimeout(Duration.ofSeconds(60)) // Đợi kết nối 60s
-                .withReadTimeout(Duration.ofSeconds(60));    // Đợi AI xử lý 60s
+                .withConnectTimeout(Duration.ofSeconds(60000)) // Đợi kết nối 60s
+                .withReadTimeout(Duration.ofSeconds(60000));    // Đợi AI xử lý 60s
 
         return builder
                 .requestFactorySettings(settings)
