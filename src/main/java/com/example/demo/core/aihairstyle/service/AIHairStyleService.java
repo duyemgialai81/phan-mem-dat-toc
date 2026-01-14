@@ -20,7 +20,7 @@ import java.util.*;
 @Slf4j
 public class AIHairStyleService {
 
-    @Value("${python.ai.api.url:https://ai-hairstyle-api.onrender.com}")
+    @Value("${python.ai.api.url:https://server-ai-li5o.onrender.com}")
     private String pythonAiApiUrl;
 
     @Value("${cloudinary.cloud.name:}")
@@ -80,22 +80,29 @@ public class AIHairStyleService {
         log.info("Generating hair style preview with Python AI API...");
 
         try {
-            // Call Python API
-            String apiUrl = pythonAiApiUrl + "/api/generate-preview";
+            // Call Python API - Endpoint: /process-hair
+            String apiUrl = pythonAiApiUrl + "/process-hair";
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
+            // Tạo prompt chi tiết hơn
+            String detailedPrompt = String.format(
+                    "%s, realistic modern hairstyle, highly detailed, professional hair salon, " +
+                            "natural look, photorealistic, 8k, studio lighting",
+                    styleDescription
+            );
+
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("face_image_url", faceImageUrl);
-            requestBody.put("style_image_url", styleImageUrl);
-            requestBody.put("style_description", styleDescription);
+            requestBody.put("image_url", faceImageUrl);  // ✅ Đổi key cho khớp với Python
+            requestBody.put("prompt", detailedPrompt);   // ✅ Gửi prompt mô tả kiểu tóc
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
             log.info("Calling Python AI API: {}", apiUrl);
+            log.info("Request payload: image_url={}, prompt={}", faceImageUrl, detailedPrompt);
 
-            // Set timeout 60 seconds
+            // Set timeout 90 seconds (AI model có thể chậm)
             restTemplate.getInterceptors().clear();
 
             ResponseEntity<byte[]> response = restTemplate.exchange(
@@ -115,6 +122,15 @@ public class AIHairStyleService {
             } else {
                 throw new RuntimeException("Empty response from Python AI API");
             }
+
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            log.error("HTTP error from Python API: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+
+            if (e.getStatusCode().value() == 503) {
+                throw new RuntimeException("AI Model đang khởi động, vui lòng thử lại sau 30 giây");
+            }
+
+            throw new RuntimeException("Lỗi từ Python AI API: " + e.getMessage());
 
         } catch (Exception e) {
             log.error("Error calling Python AI API", e);
@@ -165,16 +181,24 @@ public class AIHairStyleService {
 
         // 3. Generate preview với Python AI API
         log.info("Step 3: Generating preview with Python AI API...");
-        String styleDescription = String.format("%s %s hair style",
-                template.getLength().toLowerCase(),
-                template.getName()
+        String styleDescription = String.format("%s %s hair style, %s length",
+                template.getName(),
+                template.getGender().toLowerCase(),
+                template.getLength().toLowerCase()
         );
 
-        String resultImageUrl = generateHairStylePreview(
-                faceImageUrl,
-                template.getImageUrl(),
-                styleDescription
-        );
+        String resultImageUrl;
+        try {
+            resultImageUrl = generateHairStylePreview(
+                    faceImageUrl,
+                    template.getImageUrl(),
+                    styleDescription
+            );
+        } catch (Exception e) {
+            log.error("Failed to generate AI preview, using template image as fallback", e);
+            // Fallback: Sử dụng ảnh template
+            resultImageUrl = template.getImageUrl();
+        }
 
         // 4. Lưu kết quả
         log.info("Step 4: Saving suggestion...");
