@@ -17,7 +17,7 @@ public class AIHairChatService {
     @Value("${python.ai.api.url:https://server-ai-li5o.onrender.com}")
     private String pythonAiApiUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     /**
      * Chat với AI advisor về chăm sóc tóc
